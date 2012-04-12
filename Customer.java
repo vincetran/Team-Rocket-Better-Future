@@ -146,8 +146,26 @@ public class Customer
                 System.out.println("\n\nPress 'ENTER' to continue...");
                 String input = br.readLine();
             }catch(Exception e){ e.printStackTrace(); }
+        }
+        else if(ans==3)
+        {
+            try{
+                PreparedStatement ps = connection.prepareStatement("SELECT * FROM mutualfund ORDER BY name ASC");
+                ResultSet rs = ps.executeQuery();
+                System.out.println("Symbol\tName\t\t\tDescription\t\t\tCategory");
+                System.out.println("-------------------------------------------------------------------------");
+                while(rs.next())
+                {
+                    System.out.println(rs.getString("symbol")+"\t"+rs.getString("name")+"\t\t"+rs.getString("description")+"\t\t\t"+rs.getString("category"));
+                }
+                System.out.println("\n\nPress 'ENTER' to continue...");
+                String input = br.readLine();
+            }catch(Exception e) { e.printStackTrace(); }
+        }
+        else if(ans==4)
+        {
 
-        }      
+        }
     }
     
     public static void searchFunds()
