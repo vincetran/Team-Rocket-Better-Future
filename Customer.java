@@ -6,16 +6,25 @@ import java.lang.*;
 public class Customer
 {
     public static Scanner in = new Scanner(System.in);
-    private static String username;
+    private static String login, name, email, address, dbUsername, dbPassword;
+    private static float balance;
+    private Connection connection;
 
     public Customer()
     {}
     
-    public Customer(String username)
+    public Customer(ResultSet rs)
     {
-        this.username=username;
+        getUserInfo(rs);
         boolean exit = false;
         int action;
+
+        DriverManager.registerDriver (new oracle.jdbc.driver.OracleDriver());
+            
+        String url = "jdbc:oracle:thin:@db10.cs.pitt.edu:1521:dbclass"; 
+        connection = DriverManager.getConnection(url, "vtt2", "password"); 
+
+        System.out.println("Welcome, "+name+"!");
         
         while(exit != true)
         {
@@ -56,6 +65,18 @@ public class Customer
             }
         }
     }
+
+    public void getUserInfo(ResultSet rs)
+    {
+        try{
+            this.login = rs.getString("login");
+            this.name = rs.getString("name");
+            this.email = rs.getString("email");
+            this.address = rs.getString("address");
+            this.balance = rs.getFloat("balance");
+        }catch(SQLException e)
+        { e.printStackTrace(); }
+    }
     
     public static void browseFunds()
     {
@@ -69,7 +90,7 @@ public class Customer
         
         if(ans == 1)
         {
-            //Insert Sql Code 
+            PreparedStatement ps = connection.prepareStatement("SELECT * FROM customer WHERE login=? AND password=?");
         }
         else if(ans ==2)
         {

@@ -16,6 +16,12 @@ category varchar2(10),
 c_date date,
 constraint pk_mf primary key (symbol));
 
+insert into mutualfund values('MM', 'money-market', 'money market, conservative', 'fixed', CURRENT_DATE);
+insert into mutualfund values('RE', 'real-estate', 'real estate', 'fixed', CURRENT_DATE);
+insert into mutualfund values('LTB', 'long-term-bonds', 'long term bonds', 'bonds', CURRENT_DATE);
+insert into mutualfund values('GS', 'general-stocks', 'general stocks', 'stocks', CURRENT_DATE);
+insert into mutualfund values('BBS', 'balance-bonds-stocks', 'balance bonds and stocks', 'mixed', CURRENT_DATE);
+
 create table closingprice(
 symbol varchar2(20) not null,
 price float,
@@ -32,6 +38,10 @@ password varchar2(10) not null,
 balance float,
 constraint pk_cus primary key (login));
 
+insert into customer values('vince', 'Vincent Tran', 'hello@vincetran.me', '339 Lawn Street', 'lol', 0);
+insert into customer values('nee', 'Nee Taylor', 'net9@pitt.edu', 'Herp Derp Street', 'lol', 0);
+
+
 create table administrator(
 login varchar2(10) not null,
 name varchar2(20),
@@ -39,6 +49,8 @@ email varchar2(20),
 address varchar2(30),
 password varchar2(10),
 constraint pk_admin primary key (login));
+
+insert into administrator values('admin', 'Administrator', 'admin@teamrocket.com', '', 'root');
 
 create table allocation(
 allocation_no int not null,
@@ -90,6 +102,4 @@ begin
 	where login = :new.login;
 end;
 /
-
-
 commit;
