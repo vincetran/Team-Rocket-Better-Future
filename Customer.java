@@ -2,6 +2,7 @@ import java.util.Scanner;
 import java.util.*;
 import java.sql.*;
 import java.lang.*;
+import java.io.*;
 
 public class Customer
 {
@@ -19,10 +20,11 @@ public class Customer
         boolean exit = false;
         int action;
 
-        DriverManager.registerDriver (new oracle.jdbc.driver.OracleDriver());
-            
-        String url = "jdbc:oracle:thin:@db10.cs.pitt.edu:1521:dbclass"; 
-        connection = DriverManager.getConnection(url, "vtt2", "password"); 
+        try{
+            DriverManager.registerDriver(new oracle.jdbc.driver.OracleDriver());   
+            String url = "jdbc:oracle:thin:@db10.cs.pitt.edu:1521:dbclass"; 
+            connection = DriverManager.getConnection(url, "vtt2", "password"); 
+        }catch(SQLException e) { e.printStackTrace(); }
 
         System.out.println("Welcome, "+name+"!");
         
@@ -30,7 +32,7 @@ public class Customer
         {
             System.out.println("\n\nCustomer Options: \n");
             System.out.println("1.  Browse Mutual Funds");
-            System.out.println("2.  Search");
+            System.out.println("2.  Search Mutual Funds by Keyword");
             System.out.println("3.  Invest");
             System.out.println("4.  Sell Shares");
             System.out.println("5.  Buy Shares");
@@ -78,29 +80,73 @@ public class Customer
         { e.printStackTrace(); }
     }
     
-    public static void browseFunds()
+    public void browseFunds()
     {
-        String category;
         System.out.println("\n\nPlease pick a action: ");
-        System.out.println("1.  See all mutual funds");
-        System.out.println("2.  See only one category");
-        System.out.println("3.  Exit");
-        System.out.print("\nAnswer: ");
+        System.out.println("1.  Browse all mutual funds");
+        System.out.println("2.  Browse by category");
+        System.out.println("3.  Browse alphabetically");
+        System.out.println("4.  Browse by price on date");
+        System.out.println("5.  Exit");
+        System.out.println("-------------------------\n");
+        System.out.print("Please choose a option(1-5): ");
         int ans = in.nextInt();
+
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
         
         if(ans == 1)
         {
-            PreparedStatement ps = connection.prepareStatement("SELECT * FROM customer WHERE login=? AND password=?");
+            try{
+                PreparedStatement ps = connection.prepareStatement("SELECT * FROM mutualfund");
+                ResultSet rs = ps.executeQuery();
+                System.out.println("Symbol\tName\t\t\tDescription\t\t\tCategory");
+                System.out.println("-------------------------------------------------------------------------");
+                while(rs.next())
+                {
+                    System.out.println(rs.getString("symbol")+"\t"+rs.getString("name")+"\t\t"+rs.getString("description")+"\t\t\t"+rs.getString("category"));
+                }
+                System.out.println("\n\nPress 'ENTER' to continue...");
+                String input = br.readLine();
+            }catch(Exception e) { e.printStackTrace(); }
         }
         else if(ans ==2)
         {
             System.out.print("\nWhat category would you like to see?: \n");
-            category = in.next();
+            ArrayList<String> categories = new ArrayList<String>();
+            try{
+                PreparedStatement ps = connection.prepareStatement("SELECT distinct(category) as cat FROM mutualfund");
+                ResultSet rs = ps.executeQuery();
+                while(rs.next())
+                {
+                    categories.add(rs.getString("cat"));
+                }
+            }catch(Exception e){ e.printStackTrace(); }
+
+            for(int i = 0; i < categories.size(); i++)
+                System.out.println((i+1)+".  "+categories.get(i));
             
-            //Insert Sql Code
-            
-            //Need to figure out a way to loop around if a invalid category is given
-            //System.out.println("That is not an available category!");
+            System.out.println("-------------------------\n");
+            int selection;
+
+            do{
+                System.out.print("Please choose a option(1-"+categories.size()+"): ");
+                selection = in.nextInt();
+            }while(selection > categories.size() || selection < 1);
+
+            try{
+                PreparedStatement ps = connection.prepareStatement("SELECT * FROM mutualfund where category=?");
+                ps.setString(1, categories.get(selection-1));
+                ResultSet rs = ps.executeQuery();
+                System.out.println("Symbol\tName\t\t\tDescription\t\t\tCategory");
+                System.out.println("-------------------------------------------------------------------------");
+                while(rs.next())
+                {
+                    System.out.println(rs.getString("symbol")+"\t"+rs.getString("name")+"\t\t"+rs.getString("description")+"\t\t\t"+rs.getString("category"));
+                }
+                System.out.println("\n\nPress 'ENTER' to continue...");
+                String input = br.readLine();
+            }catch(Exception e){ e.printStackTrace(); }
+
         }      
     }
     
