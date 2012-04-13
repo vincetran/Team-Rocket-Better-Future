@@ -275,6 +275,8 @@ public class Customer
 		boolean done = false;
 		while(done == false)
 		{
+			//SQL check if user has any preferences.
+			//If yes
 			System.out.print("\n\nWhich mutual fund would you like to alter?: ");
 			String fund = in.next();
 			System.out.print("What new precentage would you like to apply to this fund?: ");
@@ -284,6 +286,10 @@ public class Customer
 			System.out.print("Would you like to change anymore precentages?(y/n): ");
 			String res = in.next();
 			if(res.equals("n")) { done = true; }
+			//If no
+			//Show list of stocks. Allow user to select which stocks using a x y z (space delimited) to choose
+			//Then prompt users (using a for loop to go through each selection) for percentages
+			//Insert into Allocation and Prefers
 		}
 	}
 	
