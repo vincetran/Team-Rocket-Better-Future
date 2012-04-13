@@ -96,10 +96,7 @@ public class TRB
                     ResultSet rs2 = ps.executeQuery();
                     if(rs2.next())
                     {
-                        //Customer cust = new Customer(rs2.getString("login"));
-                        System.out.println("Before");
-                        Customer cust = new Customer();
-                        System.out.println("After");
+                        Administrator admin = new Administrator();
                     }
                     else
                     {

@@ -7,7 +7,7 @@ import java.io.*;
 public class Customer
 {
 	public static Scanner in = new Scanner(System.in);
-	private static String login, name, email, address, dbUsername, dbPassword;
+	private static String login, name, email, address;
 	private static float balance;
 	private Connection connection;
 	private BufferedReader br;
