@@ -1,4 +1,3 @@
-import java.util.Scanner;
 import java.util.*;
 import java.sql.*;
 import java.lang.*;
@@ -66,7 +65,6 @@ public class Customer
 						break;
 				default: exit = true;
 						 break;
-					
 			}
 		}
 	}
