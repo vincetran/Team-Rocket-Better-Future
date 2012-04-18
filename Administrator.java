@@ -127,17 +127,118 @@ public class Administrator
 		}
 	}
 	
-	public static void updateShare()
+	public void updateShare()
 	{
-		System.out.println("Which share would you like to update?");
-		//SQL to print all of the shares in db
-		//User selects a share
-		//SQL check to see if it has been updated TODAY
-		//If it has already been updated:
-		System.out.println("Sorry, a share can only be updated once a day");
-		//If not:
-		System.out.println("What is this share's closing price?");
-		//SQL INSERT into closingprice values(share, price, date);
+		PreparedStatement ps;
+		boolean loop = true;
+		while(loop)
+		{
+			System.out.println("Which share would you like to update?\n");
+			ArrayList<String> symbols = new ArrayList<String>();
+			ArrayList<String> names = new ArrayList<String>();
+			try{
+				ps = connection.prepareStatement("SELECT symbol, name FROM mutualfund");
+				ResultSet rs = ps.executeQuery();
+				while(rs.next())
+				{
+					symbols.add(rs.getString("symbol"));
+					names.add(rs.getString("name"));
+				}
+			}catch(Exception e){ e.printStackTrace(); }
+
+			for(int i = 0; i < symbols.size(); i++)
+				System.out.println((i+1)+".  "+symbols.get(i)+" | "+names.get(i));
+			
+			System.out.println("-------------------------\n");
+			int selection;
+
+			do{
+				System.out.print("Please choose an appropriate symbol to update price(1-"+symbols.size()+"): ");
+				selection = in.nextInt();
+			}while(selection > symbols.size() || selection < 1);
+
+			try{
+				ps = connection.prepareStatement("select * from closingprice where symbol=?");
+				ps.setString(1, symbols.get(selection-1));
+				ResultSet rs2 = ps.executeQuery();
+				if(rs2.next())
+				{
+					try{
+						ps = connection.prepareStatement("select symbol, P_DATE from closingprice where symbol=? AND p_date=to_date(sysdate, 'DD-MON-YY')");
+						ps.setString(1, symbols.get(selection-1));
+						ResultSet rs = ps.executeQuery();
+						if(rs.next()) //If the share has already been updated today
+						{
+							System.out.println("\nIt looks like this share has already been updated today.");
+							System.out.println("A share's price can only be updated once a day.");
+							loop = false;
+							System.out.println("\n\nPress 'ENTER' to continue...");
+							String input = br.readLine();
+						}
+						else //If the share is able to be updated today
+						{
+							float price=0;
+							try{ //Gets current price of share
+								ps = connection.prepareStatement("SELECT price FROM closingprice WHERE symbol=? ORDER BY p_date DESC");
+								ps.setString(1, symbols.get(selection-1));
+								ResultSet rs3 = ps.executeQuery();
+								rs3.next();
+								price = rs3.getFloat("price");
+							}catch(Exception e){ e.printStackTrace(); }
+
+							float newPrice=0;
+							boolean check=true;
+							while(check)
+							{
+								System.out.println("The current cost of each share is: $"+price);
+								System.out.print("What would you like to update the share price to (float value accepted)?: ");
+								newPrice = in.nextFloat();
+								if(newPrice > 0)
+								{
+									ps=connection.prepareStatement("INSERT INTO closingprice VALUES(?,?,to_date(sysdate))");
+									ps.setString(1, symbols.get(selection-1));
+									ps.setFloat(2, newPrice);
+									ps.executeUpdate();
+									System.out.println("\nUpdate Successful!\n");
+									check=false;
+									loop=false;
+									System.out.println("\n\nPress 'ENTER' to continue...");
+									String input = br.readLine();
+								}
+								else
+									System.out.println("Sorry, the value must be a non-zero positive number...");
+								
+							}
+						}
+					}catch(Exception e){ e.printStackTrace(); }
+				}
+				else //If the selected symbol is NOT in closingprice
+				{
+					float newPrice=0;
+					System.out.println("\nIt looks like the selected symbol's price hasn't been set yet.");
+					boolean check=true;
+					while(check)
+					{
+						System.out.print("What would you like to set the share price to (float value accepted)?: ");
+						newPrice = in.nextFloat();
+						if(newPrice > 0)
+						{
+							ps=connection.prepareStatement("INSERT INTO closingprice VALUES(?,?,to_date(sysdate))");
+							ps.setString(1, symbols.get(selection-1));
+							ps.setFloat(2, newPrice);
+							ps.executeUpdate();
+							System.out.println("\nUpdate Successful!\n");
+							check=false;
+							loop=false;
+							System.out.println("\n\nPress 'ENTER' to continue...");
+							String input = br.readLine();
+						}
+						else
+							System.out.println("Sorry, the value must be a non-zero positive number...");
+					}
+				}
+			}catch(Exception e){ e.printStackTrace(); }
+		}
 	}
 	
 	public void addMFunds()
