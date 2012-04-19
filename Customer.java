@@ -230,21 +230,21 @@ public class Customer
 				while(loop){
 					System.out.println("You have Allocation Preferences set up.\n"+
 					"Would you like to use them when you INVEST or do you just want to DEPOSIT?"+
-					"1. INVEST \n2. DEPOSIT \n3. CANCEL");
+					"\n1. INVEST \n2. DEPOSIT \n3. CANCEL");
 					System.out.println("-------------------------\n");
-					System.out.print("Selection: ");
+					System.out.print("Please choose an option (1-3): ");
 					int ans = in.nextInt();
-					if(ans == 0)
+					if(ans == 1)
 					{
 						investPrompt();
 						loop=false;
 					}
-					else if(ans == 1)
+					else if(ans == 2)
 					{
 						depositPrompt();
 						loop=false;
 					}
-					else if(ans == 2)
+					else if(ans == 3)
 					{
 						loop=false;
 					}
@@ -273,6 +273,10 @@ public class Customer
 			ps.executeUpdate();
 			balance += val;
 			ps.close();
+			System.out.println("\nYou have deposited $"+val+" into your account.");
+			System.out.println("\n\nPress 'ENTER' to continue...");
+			String input = br.readLine();
+
 		}catch(Exception e) { e.printStackTrace(); }
 	}
 	
@@ -338,7 +342,9 @@ public class Customer
 				rs.next();
 				price = rs.getFloat("price");
 				ps.close();
-			}catch(Exception e){ e.printStackTrace(); }
+			}catch(Exception e){ 
+				break;
+			}
 
 			boolean check=true;
 			while(check)
@@ -349,8 +355,8 @@ public class Customer
 				int shares = in.nextInt();
 
 				if((shares*price) > balance)
-					System.out.println("Whoa, you just tried to buy more shares than you have money for!"+
-						"\nLet's try this again...\n");
+					System.out.println("\n\nWhoa, you just tried to buy more shares than you have money for!"+
+						"\nLet's try this again...");
 				else{
 					try{
 						ps = connection.prepareStatement("INSERT INTO trxlog VALUES(?,?,?,to_date(sysdate),?,?,?,?)");
@@ -376,6 +382,62 @@ public class Customer
 	
 	public void changePref()
 	{
+		PreparedStatement ps, ps2;
+		ResultSet rs, rs2, rs3;
+		boolean loop = true;
+		while(loop)
+		{
+			ArrayList<String> symbols = new ArrayList<String>();
+			ArrayList<Float> percentages = new ArrayList<Float>();
+			ArrayList<String> names = new ArrayList<String>();
+			try{
+				ps = connection.prepareStatement("SELECT login, p_date FROM allocation WHERE login=? order by p_date");
+				ps.setString(1, login);
+				rs = ps.executeQuery();
+				if(rs.next())
+				{
+					ps = connection.prepareStatement("SELECT count(*) FROM allocation WHERE login='vince' AND TO_CHAR(p_date, 'MM')=to_char((SELECT p_date FROM mutualdate), 'MM')");
+					rs3 = ps.executeQuery();
+					ps = connection.prepareStatement("SELECT symbol, percentage from prefers natural join(SELECT allocation_no FROM allocation WHERE p_date =(SELECT max(p_date) FROM allocation WHERE login=? GROUP BY login))");
+					ps.setString(1, login);
+					rs2 = ps.executeQuery();
+					System.out.println("Your current allocation preferences are as follows:\n");
+					while(rs2.next())
+					{
+						symbols.add(rs2.getString("symbol"));
+						percentages.add(rs2.getFloat("percentage"));
+
+						System.out.println("Symbol:  "+rs2.getString("symbol"));
+						System.out.println("Percent: "+(Float.parseFloat(rs2.getString("percentage"))*100)+"%\n");
+					}
+					ps.close();
+
+					if(rs3.next())
+					{
+						System.out.println("\n\nSorry, you have already updated your preferences this month.");
+						System.out.println("You'll have to wait until next month to update your preferences.");
+						System.out.println("\n\nPress 'ENTER' to continue...");
+						String input = br.readLine();
+						loop=false;
+					}
+					else
+					{
+						editPref();
+						loop=false;
+					}
+				}
+				else
+				{
+					System.out.println("\nYou have not set your preferences yet. Let's change that!");
+					editPref();
+					loop=false;
+				}
+			}catch(Exception e){ e.printStackTrace(); }
+		}
+	}
+
+	public void editPref()
+	{
 		PreparedStatement ps;
 		ResultSet rs, rs2;
 		boolean loop = true;
@@ -384,112 +446,92 @@ public class Customer
 			ArrayList<String> symbols = new ArrayList<String>();
 			ArrayList<Float> percentages = new ArrayList<Float>();
 			ArrayList<String> names = new ArrayList<String>();
-			try{
-				ps = connection.prepareStatement("SELECT login FROM allocation WHERE login=?");
-				ps.setString(1, login);
+
+			try
+			{
+				ps = connection.prepareStatement("SELECT symbol, name FROM mutualfund");
 				rs = ps.executeQuery();
-				if(rs.next())
+				System.out.println("\nFrom the list below, select all of the mutual funds you want SPACE DELIMITED:");
+				while(rs.next())
 				{
-					ps = connection.prepareStatement("SELECT symbol, percentage from prefers natural join(SELECT allocation_no FROM allocation WHERE p_date =(SELECT max(p_date) FROM allocation WHERE login=? GROUP BY login))");
-					ps.setString(1, login);
-					rs2 = ps.executeQuery();
-					System.out.println("Your current allocation preferences are as follows:");
-					while(rs2.next())
+					symbols.add(rs.getString("symbol"));
+					names.add(rs.getString("name"));
+				}
+				ps.close();
+				for(int i = 0; i < symbols.size(); i++)
+					System.out.println((i+1)+".  "+symbols.get(i)+" | "+names.get(i));
+			
+				System.out.println("-------------------------\n");
+
+				System.out.print("\n\nSelect all of the mutual funds you want SPACE DELIMITED: ");
+				in.nextLine();
+				String input = in.nextLine();
+				String[] keywords = input.split(" ");
+				ArrayList<Integer> percentBreakdown = new ArrayList<Integer>();
+				int totalPercent = 100;
+				int selectedPercent = 0;
+				boolean check;
+				for(int i=0; i < keywords.length; i++)
+				{
+					check = true;
+					while(check)
 					{
-						symbols.add(rs.getString("symbol"));
-						percentages.add(rs.getFloat("percentage"));
+						System.out.print("\n\nFor mutual fund '"+symbols.get(Integer.parseInt(keywords[i])-1)+"', how much of "+totalPercent+
+							"% would you like your investments to go to: ");
+						selectedPercent = in.nextInt();
+						if((totalPercent-selectedPercent) < 0)
+						{
+							System.out.println("Hold up... you selected a percentage breakdown that would exceed 100%");
+							System.out.println("Let's try this again...");
+						}
+						else
+						{
+							percentBreakdown.add(selectedPercent);
+							totalPercent -= selectedPercent;
+							check = false;
+						}
+
 					}
+				}
+
+				System.out.println("To confirm, this is what your allocation preferences will be...");
+				System.out.println("Remember, you can only change this once a month!\n");
+
+				for(int i=0; i < keywords.length; i++)
+					System.out.println(symbols.get(Integer.parseInt(keywords[i])-1)+" | "+percentBreakdown.get(i)+"%");
+
+				System.out.print("Is this correct (1 for YES, 2 to CANCEL entire operation)? ");
+				int ans = in.nextInt();
+				if(ans==1)
+				{
+					ps = connection.prepareStatement("INSERT INTO allocation VALUES(1, ?, to_date(sysdate))");
+					ps.setString(1, login);
+					ps.executeUpdate();
 					ps.close();
 
+					ps = connection.prepareStatement("SELECT allocation_no FROM allocation ORDER BY allocation_no DESC");
+					rs2 = ps.executeQuery();
+					ps.close();
+					for(int i=0; i<keywords.length; i++)
+					{
+						ps = connection.prepareStatement("INSERT INTO prefers VALUES(?, ?, ?)");
+						ps.setInt(1, rs2.getInt("allocation_no"));
+						ps.setString(2, symbols.get(Integer.parseInt(keywords[i])-1));
+						ps.setFloat(3, percentBreakdown.get(i)/100);
+						ps.executeUpdate();
+					}
+					loop=false;
 				}
 				else
 				{
-					ps = connection.prepareStatement("SELECT symbol, name FROM mutualfund");
-					rs2 = ps.executeQuery();
-					System.out.println("\nYou have not set your preferences yet. Let's change that!");
-					System.out.println("\nFrom the list below, select all of the mutual funds you want SPACE DELIMITED:");
-					while(rs2.next())
-					{
-						symbols.add(rs2.getString("symbol"));
-						names.add(rs2.getString("name"));
-					}
-					ps.close();
-					for(int i = 0; i < symbols.size(); i++)
-						System.out.println((i+1)+".  "+symbols.get(i)+" | "+names.get(i));
-				
-					System.out.println("-------------------------\n");
-
-					System.out.print("\n\nSelect all of the mutual funds you want SPACE DELIMITED: ");
-					in.nextLine();
-					String input = in.nextLine();
-					String[] keywords = input.split(" ");
-					ArrayList<Integer> percentBreakdown = new ArrayList<Integer>();
-					int totalPercent = 100;
-					int selectedPercent = 0;
-					boolean check;
-					for(int i=0; i < keywords.length; i++)
-					{
-						check = true;
-						while(check)
-						{
-							System.out.print("\n\nFor mutual fund '"+symbols.get(Integer.parseInt(keywords[i])-1)+"', how much of "+totalPercent+
-								"% would you like your investments to go to: ");
-							selectedPercent = in.nextInt();
-							if((totalPercent-selectedPercent) < 0)
-							{
-								System.out.println("Hold up... you selected a percentage breakdown that would exceed 100%");
-								System.out.println("Let's try this again...");
-							}
-							else
-							{
-								percentBreakdown.add(selectedPercent);
-								totalPercent -= selectedPercent;
-								check = false;
-							}
-
-						}
-					}
-
-					System.out.println("To confirm, this is what your allocation preferences will be...");
-					System.out.println("Remember, you can only change this once a month!\n");
-
-					for(int i=0; i < keywords.length; i++)
-						System.out.println(symbols.get(Integer.parseInt(keywords[i])-1)+" | "+percentBreakdown.get(i)+"%");
-
-					System.out.print("Is this correct (1 for YES, 2 to CANCEL entire operation)? ");
-					int ans = in.nextInt();
-					if(ans==1)
-					{
-						ps = connection.prepareStatement("INSERT INTO allocation VALUES(1, ?, to_date(sysdate))");
-						ps.setString(1, login);
-						ps.executeUpdate();
-						ps.close();
-
-						ps = connection.prepareStatement("SELECT allocation_no FROM allocation ORDER BY allocation_no DESC");
-						rs2 = ps.executeQuery();
-						ps.close();
-						for(int i=0; i<keywords.length; i++)
-						{
-							ps = connection.prepareStatement("INSERT INTO prefers VALUES(?, ?, ?)");
-							ps.setInt(1, rs2.getInt("allocation_no"));
-							ps.setString(2, symbols.get(Integer.parseInt(keywords[i])-1));
-							ps.setFloat(3, percentBreakdown.get(i)/100);
-							ps.executeUpdate();
-						}
-						loop=false;
-					}
-					else
-					{
-						System.out.println("\nEnding entire operation...");
-						loop=false;
-					}
+					System.out.println("\nEnding entire operation...");
 					loop=false;
 				}
 			}catch(Exception e){ e.printStackTrace(); }
 		}
 	}
 	
-	public static void portfolio() //TO DO
+	public void portfolio() //TO DO
 	{
 	}
 }

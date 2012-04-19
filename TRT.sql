@@ -8,6 +8,7 @@ drop table trxlog cascade constraints;
 drop table owns cascade constraints;
 drop table mutualdate cascade constraints;
 drop table trxlog_aux;
+drop table test;
 
 create table mutualfund(
 symbol varchar2(20) not null,
@@ -30,7 +31,8 @@ p_date date,
 constraint pk_cp primary key (symbol, p_date),
 constraint fk_cp_mf foreign key (symbol) references mutualfund(symbol));
 
-insert into closingprice values('MM', 10.0, sysdate);
+insert into closingprice values('MM', 120.0, sysdate);
+insert into closingprice values('RE', 190.0, sysdate);
 
 create table customer(
 login varchar2(10) not null,
@@ -120,68 +122,134 @@ create table mutualdate(
 c_date date not null,
 constraint pk_md primary key(c_date));
 
-
-create or replace trigger update_balance_buy
-after insert on trxlog
-for each row
-when(new.action = 'buy')
-begin
-	update customer
-	set balance = balance - :new.amount
-	where login = :new.login;
-
-	insert into owns values(:new.login, :new.symbol, :new.num_shares);
-	exception 
-	when dup_val_on_index then
-		update owns
-		set shares = :new.num_shares 
-		where login = :new.login AND symbol = :new.symbol;
-end;
-/
-
-
 create table trxlog_aux(
 login varchar2(10),
 amount float,
-alloc_no int
+alloc_no int,
+t_date date
+);
+
+create table test(
+symbol varchar2(10),
+num_shares int,
+price float, 
+amount float
 );
 
 insert into allocation values(0, 'vince', sysdate);
 insert into prefers values(0, 'MM', .3);
 insert into prefers values(0, 'RE', .7);
 
+/*
+* This trigger fires after each insert into trxlog_aux
+* It will calculate all of the arithmetic involved 
+* for each of the buy transactions and then insert into
+* the original trxlog. It will also update the owns
+* table.
+*/
+
 create or replace trigger calc_shares
 after insert on trxlog_aux
+for each row
+declare
+	cursor cur_preferred is
+		select symbol, percentage
+		from prefers
+		where allocation_no=:new.alloc_no;
+	pre_symbol varchar2(5);
+	pre_percent float; 
+	curr_closing_price float;
+	amount_to_invest float;
+	amount_for_symbol float;
+	num_shares int;
+	amount_remainder float;
 begin
-	insert into trxlog
-		values(5, 'vince', 'MM', sysdate, 'buy', 100, 100, 100);
+	FOR preferred in cur_preferred
+	LOOP
+		pre_symbol := preferred.symbol;
+		select price into curr_closing_price from closingprice
+			where symbol = pre_symbol
+			order by p_date DESC;
+		pre_percent := preferred.percentage;
+		amount_to_invest := :new.amount;
+		amount_for_symbol := pre_percent * amount_to_invest;
+		num_shares := floor(amount_for_symbol / curr_closing_price);
+
+		insert into trxlog values(0, :new.login, pre_symbol, sysdate, 'buy', num_shares, curr_closing_price, num_shares*curr_closing_price);
+
+		amount_remainder := amount_for_symbol - (num_shares*curr_closing_price);
+
+	END LOOP;
 end;
 /
+show errors;
 
-create or replace trigger update_balance
+/* 
+* The two triggers will fire whenever there is a 
+* buy or sell transaction
+*/
+
+create or replace trigger update_balance_sell
 after insert on trxlog
 for each row
 when(new.action = 'sell')
 begin
 	update customer
-	set balance = balance + :new.amount
-	where login = :new.login;
+		set balance = balance + :new.amount
+		where login = :new.login;
+	update owns
+		set shares = shares - :new.num_shares
+		where login = :new.login and
+		symbol = :new.symbol;
 end;
 /
 
+create or replace trigger update_balance_buy
+after insert on trxlog
+for each row
+when(new.action = 'buy')
+declare
+	sym_exists int;
+	prev_shares int;
+begin
+	update customer
+	set balance = balance - :new.amount
+	where login = :new.login;	
+
+	select count(*) into sym_exists from owns
+			where login = :new.login and symbol = :new.symbol;
+	IF sym_exists >= 1 THEN
+		select shares into prev_shares from owns
+			where login = :new.login and symbol = :new.symbol;
+		update owns set shares = prev_shares+:new.num_shares 
+			where login = :new.login and symbol = :new.symbol;
+	ELSE
+		insert into owns values(:new.login, :new.symbol, :new.num_shares );
+	END IF;
+end;
+/
+show errors;
+
+/*
+* Whenever there is a deposit transaction into trxlog
+* the trigger will fire and add the data needed
+* for the calc_shares trigger. i.e. login name
+* the amount deposited and the user's latest allocation id
+*/
 create or replace trigger deposit_action
 after insert on trxlog
 declare 
 	cursor cur_last_trx is
-		select login, amount, action
+		select login, amount, action, t_date
 		from trxlog
 		order by trans_id desc;
 	login_name varchar2(10);
 	deposit_amount int;
 	action varchar2(10);
+	trx_date date;
 begin
 	open cur_last_trx;
-	fetch cur_last_trx into login_name, deposit_amount, action;
+	fetch cur_last_trx into login_name, deposit_amount, action, trx_date;
 
 	IF action = 'deposit' THEN
 		insert into trxlog_aux
@@ -190,7 +258,7 @@ begin
 					where p_date = (select max(p_date)
 						from allocation
 						where login = login_name
-						group by login))
+						group by login)), trx_date
 				);
 	END if;
 
