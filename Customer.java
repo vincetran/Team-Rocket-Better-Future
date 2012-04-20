@@ -3,6 +3,10 @@ import java.sql.*;
 import java.lang.*;
 import java.io.*;
 
+/*
+TO DO: CHANGE ALL SYSDATES
+*/
+
 public class Customer
 {
 	public static Scanner in = new Scanner(System.in);
@@ -24,6 +28,8 @@ public class Customer
 			DriverManager.registerDriver(new oracle.jdbc.driver.OracleDriver());   
 			String url = "jdbc:oracle:thin:@db10.cs.pitt.edu:1521:dbclass"; 
 			connection = DriverManager.getConnection(url, "vtt2", "password"); 
+			connection.setAutoCommit(false);
+			connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 		}catch(SQLException e) { e.printStackTrace(); }
 
 		br = new BufferedReader(new InputStreamReader(System.in));
@@ -167,9 +173,25 @@ public class Customer
 		}
 		else if(ans==4)
 		{
-			/* 
-			* TO DO
-			*/
+			System.out.print("Enter the date you wish to browse the funds for (DD-MON-YY format): ");
+			String date = in.next();
+
+			try{
+				PreparedStatement ps = connection.prepareStatement("select mutualfund.symbol, name, description, category, price, p_date "+
+					"from mutualfund JOIN closingprice on mutualfund.symbol=closingprice.symbol "+
+					"where trunc(p_date)=? order by price DESC");
+				ps.setString(1, date);
+				ResultSet rs = ps.executeQuery();
+				System.out.println("Symbol\tName\t\t\tDescription\t\t\tCategory");
+				System.out.println("-------------------------------------------------------------------------");
+				while(rs.next())
+				{
+					System.out.println(rs.getString("symbol")+"\t"+rs.getString("name")+"\t\t"+rs.getString("description")+"\t\t\t"+rs.getString("category"));
+				}
+				ps.close();
+				System.out.println("\n\nPress 'ENTER' to continue...");
+				String input = br.readLine();
+			}catch(Exception e) { e.printStackTrace(); }
 		}
 	}
 	
@@ -272,6 +294,7 @@ public class Customer
 			ps.setString(2, login);
 			ps.executeUpdate();
 			balance += val;
+			connection.commit();
 			ps.close();
 			System.out.println("\nYou have deposited $"+val+" into your account.");
 			System.out.println("\n\nPress 'ENTER' to continue...");
@@ -282,24 +305,158 @@ public class Customer
 	
 	public void investPrompt()
 	{
-		System.out.println("Investing!");
+		PreparedStatement ps;
+		ResultSet rs;
+		boolean loop=true;
+		while(loop)
+		{
+			try
+			{
+				ArrayList<String> symbols = new ArrayList<String>();
+				ArrayList<Float> percentages = new ArrayList<Float>();
+				ArrayList<String> names = new ArrayList<String>();
+				ps = connection.prepareStatement("SELECT symbol, percentage from prefers natural join(SELECT allocation_no FROM allocation WHERE p_date =(SELECT max(p_date) FROM allocation WHERE login=? GROUP BY login))");
+				ps.setString(1, login);
+				rs = ps.executeQuery();
+				System.out.println("Your current allocation preferences are as follows:\n");
+				while(rs.next())
+				{
+					symbols.add(rs.getString("symbol"));
+					percentages.add(rs.getFloat("percentage"));
+
+					System.out.println("Symbol:  "+rs.getString("symbol"));
+					System.out.println("Percent: "+(Float.parseFloat(rs.getString("percentage"))*100)+"%\n");
+				}
+				ps.close();
+
+				boolean check = true;
+				while(check)
+				{
+					System.out.print("\nHow much would you like to invest (float value accepted; 0 to cancel)? ");
+					float investAmount = in.nextFloat();
+					if(investAmount > 0)
+					{
+						ps = connection.prepareStatement("UPDATE customer SET balance=? WHERE login=?");
+						ps.setFloat(1, balance+investAmount);
+						ps.setString(2, login);
+						ps.executeUpdate();
+						balance += investAmount;
+						connection.commit();
+
+						ps = connection.prepareStatement("INSERT into trxlog values(0, ?, NULL, sysdate, 'deposit', NULL, NULL, ?)");
+						ps.setString(1, login);
+						ps.setDouble(2, investAmount);
+						ps.executeUpdate();
+						connection.commit();
+
+						ps = connection.prepareStatement("SELECT balance FROM customer WHERE login=?");
+						ps.setString(1, login);
+						rs = ps.executeQuery();
+						rs.next();
+						balance = rs.getFloat("balance");
+						ps.close();
+						System.out.println("\n$"+investAmount+" has successfully been invested into your account."+
+							"\nAny excess amount will be deposited to your account balance."+
+							"\nYour current balance is: $"+balance);
+						
+						System.out.println("\n\nPress 'ENTER' to continue...");
+						String input = br.readLine();
+						check=false;
+						loop=false;
+					}
+					else if(investAmount == 0)
+					{
+						check=false;
+						loop=false;
+					}
+					else
+					{
+						System.out.println("\nYour value is negative. Please enter an appropriate amount...\n");
+					}
+				}
+			}catch(Exception e){ e.printStackTrace(); }
+		}
 	}
 
-	public static void sellShares() //TO DO
+	public void sellShares()
 	{
-		boolean done = false;
-		while(done == false)
+		PreparedStatement ps;
+		ResultSet rs;
+		boolean loop=true, check=true;
+		while(loop)
 		{
-			System.out.print("\n\nWhat mutual fund would you like to sell your shares?: ");
-			String fund = in.next();
-			System.out.print("How many shares would you like to sell?: ");
-			int shares = in.nextInt();
+			ArrayList<String> symbols = new ArrayList<String>();
+			ArrayList<Integer> number = new ArrayList<Integer>();
+			System.out.println("You have own the following shares: ");
+			try{
+				ps = connection.prepareStatement("SELECT symbol, shares FROM owns WHERE login=?");
+				ps.setString(1, login);
+				rs = ps.executeQuery();
+				while(rs.next())
+				{
+					symbols.add(rs.getString("symbol"));
+					number.add(rs.getInt("shares"));
+					System.out.println("\nSymbol:   "+rs.getString("symbol"));
+					System.out.println("Number of Shares:   "+rs.getInt("shares"));
+				}
+			}catch(Exception e) { e.printStackTrace(); }
 
-			//Insert SQL Code
-		
-			System.out.print("Would you like to sell more shares?(y/n): ");
-			String res = in.next();
-			if(res.equals("n")) { done = true; }
+			System.out.println("-----------------------------");
+
+			for(int i = 0; i < symbols.size(); i++)
+				System.out.println((i+1)+".  "+symbols.get(i));
+			System.out.println("-----------------------------\n");
+
+			int selection=0, shares=0;
+
+			while(check)
+			{
+				System.out.print("\nWhich mutual fund would you like to sell?\n");
+				System.out.print("Select from 1-"+symbols.size()+":  ");
+				selection = in.nextInt();
+				if(selection > symbols.size() || selection <= 0)
+				{
+					System.out.println("You chose an improper number...\n\n");
+				}
+				else
+					check=false;
+			}
+			check=true;
+
+			while(check)
+			{
+				System.out.print("\nHow many shares would you like to sell? ");
+				System.out.print("\nSelect from 1-"+number.get(selection-1)+":  ");
+				shares = in.nextInt();
+				if(shares > number.get(selection-1))
+				{
+					System.out.println("You chose a number greater than the number of shares you own...\n\n");
+				}
+				else
+					check=false;
+			}
+			check=true;
+
+			try{
+				ps = connection.prepareStatement("SELECT price FROM closingprice WHERE symbol=? ORDER BY p_date DESC");
+				ps.setString(1, symbols.get(selection-1));
+				rs = ps.executeQuery();
+				rs.next();
+				float price = rs.getFloat("price");
+				ps = connection.prepareStatement("INSERT INTO trxlog values (0, ?, ?, sysdate, 'sell', ?, ?, ?)");
+				ps.setString(1, login);
+				ps.setString(2, symbols.get(selection-1));
+				ps.setInt(3, shares);
+				ps.setFloat(4, price);
+				ps.setFloat(5, shares*price);
+				ps.executeUpdate();
+				connection.commit();
+				ps.close();
+				loop=false;
+				System.out.println("\n\nPress 'ENTER' to continue...");
+				String input = br.readLine();
+			}catch(Exception e){ e.printStackTrace(); }
+			
 		}	
 	}
 	
@@ -309,7 +466,7 @@ public class Customer
 		boolean loop = true;
 		while(loop)
 		{
-			System.out.print("\nThese are the available stocks to purchuase: \n");
+			System.out.print("\nThese are the available stocks to purchuse: \n");
 			ArrayList<String> symbols = new ArrayList<String>();
 			ArrayList<String> names = new ArrayList<String>();
 			try{
@@ -329,6 +486,23 @@ public class Customer
 			System.out.println("-------------------------\n");
 			int selection;
 
+			int option = 0;
+			boolean check=true;
+			while(check)
+			{
+				System.out.println("How would like to purchase shares?");
+				System.out.println("1. By number of shares\n2. By number of dollars");
+				System.out.println("-------------------------\n");
+				System.out.print("Please select an option (1-2):  ");
+				option = in.nextInt();
+				if(option > 2 || option < 1)
+				{
+					System.out.println("\nYou selected an improper choice. Please select again...");
+				}
+				else
+					check=false;
+			}
+
 			do{
 				System.out.print("Please choose an appropriate symbol to purchase(1-"+symbols.size()+"): ");
 				selection = in.nextInt();
@@ -346,35 +520,108 @@ public class Customer
 				break;
 			}
 
-			boolean check=true;
-			while(check)
+			check = true;
+			if(option == 1)
 			{
-				System.out.println("\n\nThe cost of each share is: $"+price);
-				System.out.println("You currently have $"+balance+" in your account balance.");
-				System.out.print("How many shares would you like to purchase?: ");
-				int shares = in.nextInt();
-
-				if((shares*price) > balance)
-					System.out.println("\n\nWhoa, you just tried to buy more shares than you have money for!"+
-						"\nLet's try this again...");
-				else{
+				while(check)
+				{
+					System.out.println("\n\nThe cost of each share is: $"+price);
+					System.out.println("You currently have $"+balance+" in your account balance.");
+					System.out.print("How many shares would you like to purchase?: ");
+					int shares = in.nextInt();
 					try{
-						ps = connection.prepareStatement("INSERT INTO trxlog VALUES(?,?,?,to_date(sysdate),?,?,?,?)");
-						ps.setInt(1, 1); //This will be overwritten
-						ps.setString(2, login);
-						ps.setString(3, symbols.get(selection-1));
-						ps.setString(4, "buy");
-						ps.setInt(5, shares);
-						ps.setFloat(6, price);
-						ps.setFloat(7, shares*price);
-						ps.executeUpdate();
-						System.out.println("\nYou have purchased "+shares+" shares of "+names.get(selection-1)+".");
-						ps.close();
-						System.out.println("\n\nPress 'ENTER' to continue...");
-						String input = br.readLine();
-						loop=false;
-					}catch(Exception e){ e.printStackTrace(); }
-					check=false;
+						ps = connection.prepareStatement("SELECT balance FROM customer WHERE login=?");
+						ps.setString(1, login);
+						ResultSet rs1 = ps.executeQuery();
+						rs1.next();
+						balance = rs1.getFloat("balance");
+
+						ps = connection.prepareStatement("SELECT price FROM closingprice WHERE symbol=? ORDER BY p_date DESC");
+						ps.setString(1, symbols.get(selection-1));
+						rs1 = ps.executeQuery();
+						rs1.next();
+						price = rs1.getFloat("price");
+					}catch (Exception e) { e.printStackTrace(); }
+
+					if((shares*price) > balance)
+						System.out.println("\n\nWhoa, you just tried to buy more shares than you have money for!"+
+							"\nLet's try this again...");
+					else{
+						try{
+							ps = connection.prepareStatement("INSERT INTO trxlog VALUES(?,?,?,to_date(sysdate),?,?,?,?)");
+							ps.setInt(1, 1); //This will be overwritten
+							ps.setString(2, login);
+							ps.setString(3, symbols.get(selection-1));
+							ps.setString(4, "buy");
+							ps.setInt(5, shares);
+							ps.setFloat(6, price);
+							ps.setFloat(7, shares*price);
+							ps.executeUpdate();
+							connection.commit();
+							System.out.println("\nYou have purchased "+shares+" shares of "+names.get(selection-1)+".");
+							ps.close();
+							System.out.println("\n\nPress 'ENTER' to continue...");
+							String input = br.readLine();
+							loop=false;
+						}catch(Exception e){ e.printStackTrace(); }
+						check=false;
+					}
+				}
+			}
+			else
+			{
+				while(check)
+				{
+					System.out.println("\n\nThe cost of each share is: $"+price);
+					System.out.println("You currently have $"+balance+" in your account balance.");
+					System.out.println("How much would you like to spend to buy shares (float value accepted)? ");
+					float spend = in.nextFloat();
+
+					try{
+						ps = connection.prepareStatement("SELECT balance FROM customer WHERE login=?");
+						ps.setString(1, login);
+						ResultSet rs1 = ps.executeQuery();
+						rs1.next();
+						balance = rs1.getFloat("balance");
+
+						ps = connection.prepareStatement("SELECT price FROM closingprice WHERE symbol=? ORDER BY p_date DESC");
+						ps.setString(1, symbols.get(selection-1));
+						rs1 = ps.executeQuery();
+						rs1.next();
+						price = rs1.getFloat("price");
+					}catch (Exception e) { e.printStackTrace(); }
+
+					if(spend > balance)
+					{
+						System.out.println("\nWhoa, you're trying to spend more than you have. Please try that again...\n");
+						continue;
+					}
+					else{
+						try{
+							double calc_shares = Math.floor(spend/price);
+							int shares = (int) calc_shares;
+							float leftover = spend-(shares*price);
+							if(leftover>0)
+								System.out.println("\nYou have $"+leftover+" leftover that will remain in your balance.\n");
+							ps = connection.prepareStatement("INSERT INTO trxlog VALUES(?,?,?,to_date(sysdate),?,?,?,?)");
+							ps.setInt(1, 1); //This will be overwritten
+							ps.setString(2, login);
+							ps.setString(3, symbols.get(selection-1));
+							ps.setString(4, "buy");
+							ps.setInt(5, shares);
+							ps.setFloat(6, price);
+							ps.setFloat(7, shares*price);
+							ps.executeUpdate();
+							connection.commit();
+							System.out.println("\nYou have purchased "+shares+" shares of "+names.get(selection-1)+".");
+							ps.close();
+							System.out.println("\n\nPress 'ENTER' to continue...");
+							String input = br.readLine();
+							loop=false;
+						}catch(Exception e){ e.printStackTrace(); }
+						check=false;
+					}
+
 				}
 			}
 		}
@@ -396,7 +643,8 @@ public class Customer
 				rs = ps.executeQuery();
 				if(rs.next())
 				{
-					ps = connection.prepareStatement("SELECT count(*) FROM allocation WHERE login='vince' AND TO_CHAR(p_date, 'MM')=to_char((SELECT p_date FROM mutualdate), 'MM')");
+					ps = connection.prepareStatement("SELECT count(*) FROM allocation WHERE login=? AND TO_CHAR(p_date, 'MM')=to_char((SELECT p_date FROM mutualdate), 'MM')");
+					ps.setString(1, login);
 					rs3 = ps.executeQuery();
 					ps = connection.prepareStatement("SELECT symbol, percentage from prefers natural join(SELECT allocation_no FROM allocation WHERE p_date =(SELECT max(p_date) FROM allocation WHERE login=? GROUP BY login))");
 					ps.setString(1, login);
@@ -432,7 +680,8 @@ public class Customer
 					editPref();
 					loop=false;
 				}
-			}catch(Exception e){ e.printStackTrace(); }
+			}catch(Exception e){ 
+				e.printStackTrace(); }
 		}
 	}
 
@@ -527,11 +776,118 @@ public class Customer
 					System.out.println("\nEnding entire operation...");
 					loop=false;
 				}
-			}catch(Exception e){ e.printStackTrace(); }
+				connection.commit();
+			}catch(Exception e){ 
+				e.printStackTrace(); }
 		}
 	}
 	
 	public void portfolio() //TO DO
 	{
+		ArrayList<String> symbolN = new ArrayList<String>();
+		ArrayList<Integer> numShare = new ArrayList<Integer>();
+		ArrayList<String> actionBS = new ArrayList<String>();
+		ArrayList<String> fsymbolN = new ArrayList<String>();
+		ArrayList<Integer> fnumShare = new ArrayList<Integer>();
+		
+		System.out.print("Please enter a date you would like to start your profile on (DD-MON-YY): ");
+		String report_date = in.next();
+		try
+		{
+			String sql = "SELECT symbol, sum(num_shares), action FROM trxlog WHERE LOGIN=?  AND trunc(t_date) <= ? GROUP BY symbol, action";
+			PreparedStatement ps = connection.prepareStatement(sql);
+			ps.setString(1, login);
+			ps.setString(2, report_date);
+			ResultSet rs = ps.executeQuery();
+			while(rs.next())
+			{
+				symbolN.add(rs.getString("symbol"));
+				numShare.add(rs.getInt("sum(num_shares)"));
+				actionBS.add(rs.getString("action"));
+			}
+			
+			for(int i = 0; i < actionBS.size();i++)
+			{
+				if(actionBS.get(i).compareTo("buy") == 0)
+				{
+					int index;
+					if(fsymbolN.contains(symbolN.get(i)) == false) 
+					{
+						fsymbolN.add(symbolN.get(i)); 
+						fnumShare.add(numShare.get(i));
+					}
+					else
+					{
+						index = fsymbolN.indexOf(symbolN.get(i));
+						fnumShare.set(index, (numShare.get(i) + fnumShare.get(index)));
+					}
+				}
+				else
+				{
+					int index;
+					if(fsymbolN.contains(symbolN.get(i)) == false) 
+					{
+						fsymbolN.add(symbolN.get(i)); 
+						fnumShare.add(numShare.get(i)* -1);
+					}
+					else
+					{
+						index = fsymbolN.indexOf(symbolN.get(i));
+						fnumShare.set(index, (fnumShare.get(index) - numShare.get(i)));
+					}
+				}
+			}
+			
+			System.out.println("\nSymbol\t\tNumber of Shares\tPrice\t\tCurrent Value\t\tCost Value\t\tYield");
+			System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+			
+			int total = 0;
+			for(int i = 0; i < fnumShare.size();i++)
+			{
+				int symPrice = 0;
+				int costValue = 0;
+				int costValueSell = 0;
+
+				if(fnumShare.get(i) != 0)
+				{
+					sql = "SELECT price FROM closingprice WHERE trunc(p_date) = ? AND symbol = ?";
+					ps = connection.prepareStatement(sql);
+					ps.setString(1, report_date);
+					ps.setString(2, fsymbolN.get(i));
+					rs = ps.executeQuery();
+					while(rs.next())
+					{
+						symPrice = rs.getInt("price");
+					}
+					
+					//Used to find costValue
+					sql = "SELECT num_shares, price FROM trxlog WHERE symbol = ? AND trunc(t_date) <= ? AND action = 'buy'";
+					ps = connection.prepareStatement(sql);
+					ps.setString(1, fsymbolN.get(i));
+					ps.setString(2, report_date);
+					rs = ps.executeQuery();
+					while(rs.next())
+					{
+						costValue += rs.getInt("num_shares")*rs.getInt("price");
+					}
+					
+					
+					//Used to find costValue for sells
+					sql = "SELECT num_shares, price FROM trxlog WHERE symbol = ? AND trunc(t_date) <= ? AND action = 'sell'";
+					ps = connection.prepareStatement(sql);
+					ps.setString(1, fsymbolN.get(i));
+					ps.setString(2, report_date);
+					rs = ps.executeQuery();
+					while(rs.next())
+					{
+						costValueSell += rs.getInt("num_shares")*rs.getInt("price");
+					}
+					System.out.println(fsymbolN.get(i) + "\t\t" + fnumShare.get(i) + "\t\t\t" + symPrice + "\t\t" + (symPrice*fnumShare.get(i))+ "\t\t\t" + costValue + "\t\t\t" + ((symPrice*fnumShare.get(i))-(costValue-costValueSell)));
+				
+					total += (symPrice*fnumShare.get(i));
+				}
+			}
+			System.out.println("\nTotal Value of Portfolio: " + total);
+		}catch(Exception e){ e.printStackTrace(); }
 	}
 }

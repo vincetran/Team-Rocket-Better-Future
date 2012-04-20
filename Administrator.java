@@ -3,6 +3,10 @@ import java.sql.*;
 import java.lang.*;
 import java.io.*;
 
+/*
+TO DO: CHANGE ALL SYSDATES
+*/
+
 public class Administrator
 {
 	public static Scanner in = new Scanner(System.in);
@@ -129,6 +133,10 @@ public class Administrator
 	
 	public void updateShare()
 	{
+		try{
+			connection.setAutoCommit(false);
+		}catch(Exception e) { e.printStackTrace(); }
+
 		PreparedStatement ps;
 		boolean loop = true;
 		while(loop)
@@ -202,6 +210,7 @@ public class Administrator
 									System.out.println("\nUpdate Successful!\n");
 									check=false;
 									loop=false;
+									connection.commit();
 									System.out.println("\n\nPress 'ENTER' to continue...");
 									String input = br.readLine();
 								}
@@ -230,6 +239,7 @@ public class Administrator
 							System.out.println("\nUpdate Successful!\n");
 							check=false;
 							loop=false;
+							connection.commit();
 							System.out.println("\n\nPress 'ENTER' to continue...");
 							String input = br.readLine();
 						}
@@ -239,6 +249,9 @@ public class Administrator
 				}
 			}catch(Exception e){ e.printStackTrace(); }
 		}
+		try{
+			connection.setAutoCommit(true);
+		}catch(Exception e){ e.printStackTrace(); }
 	}
 	
 	public void addMFunds()
@@ -325,6 +338,82 @@ public class Administrator
 	
 	public void statistics()
 	{
-		//SQL code
+		String[] monthsList = {"JAN", "FEB","MAR", "APR", "MAY", "JUN", "JUL","AUG", "SEP", "OCT", "NOV","DEC"};
+			
+		Calendar cal = Calendar.getInstance(); 
+		String currMonth = monthsList[cal.get(Calendar.MONTH)];
+		int year=cal.get(Calendar.YEAR);
+		int dayOfMonth = cal.get(Calendar.DAY_OF_MONTH); 
+		String DOM = Integer.toString(dayOfMonth);
+
+		System.out.print("\nHow many months back would you like to go?: ");
+		int months = in.nextInt();
+
+		while(months < 0)
+		{
+		System.out.print("\nHow many months back would you like to go?: ");
+		months = in.nextInt();
+		}
+
+		System.out.print("Please enter the number of top investors/ categories you would like to see: ");
+		int top = in.nextInt();
+
+		while(top < 0)
+		{
+		System.out.print("Please enter the number of top investors/ categories you would like to see: ");
+		top = in.nextInt();
+		}
+
+		int i = 0;
+		while(currMonth.compareTo(monthsList[i]) != 0)
+		{
+		i++;
+		}
+		int monthIndex = i - months;
+		int count = 0;
+		while(monthIndex < 0) 
+		{
+		monthIndex = 12 - (monthIndex*-1);
+		count++;
+		}  
+		//System.out.println("Month: " + monthsList[monthIndex]);
+		year = year - count;            
+		String sYear = Integer.toString(year);
+		sYear = sYear.substring(2);
+		//System.out.println("new year: " + sYear);
+
+		String date = DOM + "-" + monthsList[monthIndex] + "-" + sYear;
+
+		try
+		{
+		PreparedStatement ps = connection.prepareStatement("SELECT symbol, sum(amount) FROM trxlog WHERE action <> 'deposit' AND trunc(t_date) BETWEEN to_date(?) AND to_date(sysdate) GROUP BY symbol ORDER BY sum(amount) DESC");
+		ps.setString(1, date);
+		ResultSet rs = ps.executeQuery();
+		System.out.println("\n\nCategories");
+		System.out.println("Symbol\t\tSum");
+		System.out.println("---------------------");
+		int counter = 0;
+		while(rs.next())
+		{
+			System.out.println(rs.getString("symbol") + "\t\t" + rs.getString("sum(amount)"));
+			counter++;
+			if(counter == top){break;}
+		}
+
+		ps = connection.prepareStatement("SELECT login, sum(amount) FROM trxlog WHERE action <> 'deposit' AND action <> 'sell' AND trunc(t_date) BETWEEN to_date(?) AND to_date(sysdate) GROUP BY login ORDER BY sum(amount) DESC");
+		ps.setString(1, date);
+		rs = ps.executeQuery();
+		System.out.println("\n\nInvestors");      
+		System.out.println("Login\t\tSum");
+		System.out.println("---------------------");
+		counter = 0;
+		while(rs.next())
+		{
+			System.out.println(rs.getString("login") + "\t\t" + rs.getString("sum(amount)"));
+			counter++;
+			if(counter == top){break;}
+		} 
+
+		}catch(Exception e) { e.printStackTrace(); }
 	}
 }

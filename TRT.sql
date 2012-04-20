@@ -43,7 +43,7 @@ password varchar2(10) not null,
 balance float,
 constraint pk_cus primary key (login));
 
-insert into customer values('vince', 'Vincent Tran', 'hello@vincetran.me', '339 Lawn Street', 'lol', 1000);
+insert into customer values('vince', 'Vincent Tran', 'hello@vincetran.me', '339 Lawn Street', 'lol', 1200);
 insert into customer values('nee', 'Nee Taylor', 'net9@pitt.edu', 'Herp Derp Street', 'lol', 0);
 
 
@@ -156,6 +156,9 @@ declare
 		select symbol, percentage
 		from prefers
 		where allocation_no=:new.alloc_no;
+	cursor cur_closing_price is
+		select symbol, price from closingprice
+			order by p_date DESC;
 	pre_symbol varchar2(5);
 	pre_percent float; 
 	curr_closing_price float;
@@ -167,9 +170,15 @@ begin
 	FOR preferred in cur_preferred
 	LOOP
 		pre_symbol := preferred.symbol;
-		select price into curr_closing_price from closingprice
-			where symbol = pre_symbol
-			order by p_date DESC;
+		
+		FOR closing in cur_closing_price
+		LOOP
+			IF closing.symbol = pre_symbol THEN
+				curr_closing_price := closing.price;
+				EXIT;
+			END IF;
+		END LOOP;
+
 		pre_percent := preferred.percentage;
 		amount_to_invest := :new.amount;
 		amount_for_symbol := pre_percent * amount_to_invest;
@@ -182,7 +191,7 @@ begin
 	END LOOP;
 end;
 /
-show errors;
+
 
 /* 
 * The two triggers will fire whenever there is a 
@@ -211,10 +220,19 @@ when(new.action = 'buy')
 declare
 	sym_exists int;
 	prev_shares int;
+	neg_balance EXCEPTION;
+	PRAGMA EXCEPTION_INIT( neg_balance, -1378 );
+	user_balance float;
 begin
-	update customer
-	set balance = balance - :new.amount
-	where login = :new.login;	
+	select balance into user_balance from customer
+		where login=:new.login;
+	IF (user_balance-:new.amount) >= 0 THEN
+		update customer
+		set balance = balance - :new.amount
+		where login = :new.login;
+	ELSE
+		raise_application_error(-1378, 'Negative Balance Achieved');
+	END IF;
 
 	select count(*) into sym_exists from owns
 			where login = :new.login and symbol = :new.symbol;
@@ -226,6 +244,10 @@ begin
 	ELSE
 		insert into owns values(:new.login, :new.symbol, :new.num_shares );
 	END IF;
+
+	EXCEPTION
+		WHEN neg_balance THEN
+			dbms_output.put_line( sqlerrm );
 end;
 /
 show errors;
