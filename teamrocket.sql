@@ -10,6 +10,11 @@ drop table mutualdate cascade constraints;
 drop table trxlog_aux;
 drop table test;
 
+create table mutualdate(
+c_date date not null,
+constraint pk_md primary key(c_date));
+insert into mutualdate values(to_date('20-APR-12'));
+
 create table mutualfund(
 symbol varchar2(20) not null,
 name varchar2(30),
@@ -18,11 +23,11 @@ category varchar2(10),
 c_date date,
 constraint pk_mf primary key (symbol));
 
-insert into mutualfund values('MM', 'money-market', 'money market, conservative', 'fixed', CURRENT_DATE);
-insert into mutualfund values('RE', 'real-estate', 'real estate', 'fixed', CURRENT_DATE);
-insert into mutualfund values('LTB', 'long-term-bonds', 'long term bonds', 'bonds', CURRENT_DATE);
-insert into mutualfund values('GS', 'general-stocks', 'general stocks', 'stocks', CURRENT_DATE);
-insert into mutualfund values('BBS', 'balance-bonds-stocks', 'balance bonds and stocks', 'mixed', CURRENT_DATE);
+insert into mutualfund values('MM', 'money-market', 'money market, conservative', 'fixed', (SELECT c_date FROM mutualdate));
+insert into mutualfund values('RE', 'real-estate', 'real estate', 'fixed', (SELECT c_date FROM mutualdate));
+insert into mutualfund values('LTB', 'long-term-bonds', 'long term bonds', 'bonds', (SELECT c_date FROM mutualdate));
+insert into mutualfund values('GS', 'general-stocks', 'general stocks', 'stocks', (SELECT c_date FROM mutualdate));
+insert into mutualfund values('BBS', 'balance-bonds-stocks', 'balance bonds and stocks', 'mixed', (SELECT c_date FROM mutualdate));
 
 create table closingprice(
 symbol varchar2(20) not null,
@@ -30,9 +35,6 @@ price float,
 p_date date,
 constraint pk_cp primary key (symbol, p_date),
 constraint fk_cp_mf foreign key (symbol) references mutualfund(symbol));
-
-insert into closingprice values('MM', 120.0, sysdate);
-insert into closingprice values('RE', 190.0, sysdate);
 
 create table customer(
 login varchar2(10) not null,
@@ -43,8 +45,8 @@ password varchar2(10) not null,
 balance float,
 constraint pk_cus primary key (login));
 
-insert into customer values('vince', 'Vincent Tran', 'hello@vincetran.me', '339 Lawn Street', 'lol', 1200);
-insert into customer values('nee', 'Nee Taylor', 'net9@pitt.edu', 'Herp Derp Street', 'lol', 0);
+insert into customer values('vince', 'Vincent Tran', 'hello@vincetran.me', '339 Lawn Street', 'lol', 120);
+insert into customer values('nee', 'Nee Taylor', 'net9@pitt.edu', 'Herp Derp Street', 'lol', 200);
 
 
 create table administrator(
@@ -107,7 +109,6 @@ begin
 end;
 /
 
-
 create table owns(
 login varchar2(10) not null,
 symbol varchar2(20),
@@ -117,10 +118,6 @@ constraint fk_owns_cust foreign key(login) references customer(login),
 constraint fk_owns_mf foreign key(symbol) references mutualfund(symbol));
 
 insert into owns values('vince', 'MM', 10);
-
-create table mutualdate(
-c_date date not null,
-constraint pk_md primary key(c_date));
 
 create table trxlog_aux(
 login varchar2(10),
@@ -136,7 +133,7 @@ price float,
 amount float
 );
 
-insert into allocation values(0, 'vince', sysdate);
+insert into allocation values(0, 'vince', (SELECT c_date FROM mutualdate));
 insert into prefers values(0, 'MM', .3);
 insert into prefers values(0, 'RE', .7);
 
@@ -184,7 +181,7 @@ begin
 		amount_for_symbol := pre_percent * amount_to_invest;
 		num_shares := floor(amount_for_symbol / curr_closing_price);
 
-		insert into trxlog values(0, :new.login, pre_symbol, sysdate, 'buy', num_shares, curr_closing_price, num_shares*curr_closing_price);
+		insert into trxlog values(0, :new.login, pre_symbol, (SELECT c_date FROM mutualdate), 'buy', num_shares, curr_closing_price, num_shares*curr_closing_price);
 
 		amount_remainder := amount_for_symbol - (num_shares*curr_closing_price);
 
@@ -274,6 +271,7 @@ begin
 	fetch cur_last_trx into login_name, deposit_amount, action, trx_date;
 
 	IF action = 'deposit' THEN
+		
 		insert into trxlog_aux
 			values(login_name, deposit_amount, (select allocation_no
 					from allocation

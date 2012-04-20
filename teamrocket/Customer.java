@@ -35,6 +35,15 @@ public class Customer
 		br = new BufferedReader(new InputStreamReader(System.in));
 
 		System.out.println("Welcome, "+name+"!");
+
+		try{
+			PreparedStatement ps = connection.prepareStatement("SELECT balance FROM customer WHERE login=?");
+			ps.setString(1, login);
+			ResultSet rs1 = ps.executeQuery();
+			rs1.next();
+			balance = rs1.getFloat("balance");
+		}catch(Exception e){ e.printStackTrace(); }
+		System.out.println("\nYour current account balance is $"+balance);
 		
 		while(exit != true)
 		{
@@ -336,14 +345,16 @@ public class Customer
 					float investAmount = in.nextFloat();
 					if(investAmount > 0)
 					{
+						/*
 						ps = connection.prepareStatement("UPDATE customer SET balance=? WHERE login=?");
 						ps.setFloat(1, balance+investAmount);
 						ps.setString(2, login);
 						ps.executeUpdate();
 						balance += investAmount;
 						connection.commit();
+						*/
 
-						ps = connection.prepareStatement("INSERT into trxlog values(0, ?, NULL, sysdate, 'deposit', NULL, NULL, ?)");
+						ps = connection.prepareStatement("INSERT into trxlog values(0, ?, NULL, (SELECT c_date FROM mutualdate), 'deposit', NULL, NULL, ?)");
 						ps.setString(1, login);
 						ps.setDouble(2, investAmount);
 						ps.executeUpdate();
@@ -443,7 +454,7 @@ public class Customer
 				rs = ps.executeQuery();
 				rs.next();
 				float price = rs.getFloat("price");
-				ps = connection.prepareStatement("INSERT INTO trxlog values (0, ?, ?, sysdate, 'sell', ?, ?, ?)");
+				ps = connection.prepareStatement("INSERT INTO trxlog values (0, ?, ?, (SELECT c_date FROM mutualdate), 'sell', ?, ?, ?)");
 				ps.setString(1, login);
 				ps.setString(2, symbols.get(selection-1));
 				ps.setInt(3, shares);
@@ -460,7 +471,7 @@ public class Customer
 		}	
 	}
 	
-	public void buyShares() //TO DO
+	public void buyShares() 
 	{    
 		PreparedStatement ps;
 		boolean loop = true;
@@ -548,7 +559,7 @@ public class Customer
 							"\nLet's try this again...");
 					else{
 						try{
-							ps = connection.prepareStatement("INSERT INTO trxlog VALUES(?,?,?,to_date(sysdate),?,?,?,?)");
+							ps = connection.prepareStatement("INSERT INTO trxlog VALUES(?,?,?,(SELECT c_date FROM mutualdate),?,?,?,?)");
 							ps.setInt(1, 1); //This will be overwritten
 							ps.setString(2, login);
 							ps.setString(3, symbols.get(selection-1));
@@ -600,10 +611,11 @@ public class Customer
 						try{
 							double calc_shares = Math.floor(spend/price);
 							int shares = (int) calc_shares;
+							System.out.println("\nYou will be purchasing "+shares+" shares today at $"+price+" per share.");
 							float leftover = spend-(shares*price);
 							if(leftover>0)
 								System.out.println("\nYou have $"+leftover+" leftover that will remain in your balance.\n");
-							ps = connection.prepareStatement("INSERT INTO trxlog VALUES(?,?,?,to_date(sysdate),?,?,?,?)");
+							ps = connection.prepareStatement("INSERT INTO trxlog VALUES(?,?,?,(SELECT c_date FROM mutualdate),?,?,?,?)");
 							ps.setInt(1, 1); //This will be overwritten
 							ps.setString(2, login);
 							ps.setString(3, symbols.get(selection-1));
@@ -753,7 +765,7 @@ public class Customer
 				int ans = in.nextInt();
 				if(ans==1)
 				{
-					ps = connection.prepareStatement("INSERT INTO allocation VALUES(1, ?, to_date(sysdate))");
+					ps = connection.prepareStatement("INSERT INTO allocation VALUES(1, ?, (SELECT c_date FROM mutualdate))");
 					ps.setString(1, login);
 					ps.executeUpdate();
 					ps.close();
@@ -888,6 +900,9 @@ public class Customer
 				}
 			}
 			System.out.println("\nTotal Value of Portfolio: " + total);
+
+			System.out.println("\n\nPress 'ENTER' to continue...");
+			String input = br.readLine();
 		}catch(Exception e){ e.printStackTrace(); }
 	}
 }
